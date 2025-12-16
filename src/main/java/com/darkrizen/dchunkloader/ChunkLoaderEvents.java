@@ -78,6 +78,7 @@ public class ChunkLoaderEvents {
   @SubscribeEvent
   public static void onRegisterCommands(RegisterCommandsEvent event) {
     TeamCommands.registerCommands(event.getDispatcher());
+    ChunkLoaderCommands.registerCommands(event.getDispatcher());
   }
 
   @SubscribeEvent

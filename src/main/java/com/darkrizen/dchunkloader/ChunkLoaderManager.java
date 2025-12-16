@@ -27,40 +27,76 @@ public class ChunkLoaderManager {
     String dim = world.dimension().location().toString();
     Map<BlockPos, ChunkLoaderSavedData.ChunkLoader> worldLoaders = chunkLoaders.computeIfAbsent(dim, k -> new HashMap<>());
 
-    ChunkLoaderSavedData.ChunkLoader newChunkLoader = new ChunkLoaderSavedData.ChunkLoader(dim, pos, player);
-    ChunkPos chunkPos = new ChunkPos(pos);
-
     ChunkLoaderSavedData.ChunkLoader actualChunkLoader = worldLoaders.get(pos);
     boolean isActive = actualChunkLoader != null;
 
-    if (!isActive) {
-      for (ChunkLoaderSavedData.ChunkLoader chunkLoader : worldLoaders.values()) {
-        if (chunkPos.equals(new ChunkPos(chunkLoader.getPos()))) {
-          return "A chunk loader from " + chunkLoader.getOwnerDisplayName() + " is already present in this chunk.";
-        }
-      }
-    }
-
     if (isActive) {
-      worldLoaders.remove(pos);
-      toggleChunkLoader(world, actualChunkLoader, false);
-    } else {
-      int maxLoaders = DChunkLoaderConfig.MAX_LOADERS_PER_PLAYER.get();
-      if (getPlayerChunkLoaders(player.getUUID().toString()).size() >= maxLoaders) {
-        return "You have reached the max amount of chunkloader : " + maxLoaders;
+      if (removeChunkLoader(world, actualChunkLoader)) {
+        return "Chunk loader turned off, your current limit : " + getPlayerChunkLoadersCount(player) + "/" + DChunkLoaderConfig.MAX_LOADERS_PER_PLAYER.get();
       }
-      worldLoaders.put(pos, newChunkLoader);
-      toggleChunkLoader(world, newChunkLoader, true);
+    } else {
+      String validationMessage = canActivateChunkLoader(world, player, pos);
+      if (validationMessage != null) {
+        return validationMessage;
+      }
+      if (activateChunkLoader(world, player, pos)) {
+        return "Chunk loader turned on, your current limit : " + getPlayerChunkLoadersCount(player) + "/" + DChunkLoaderConfig.MAX_LOADERS_PER_PLAYER.get();
+      }
     }
+    return "Error activating/deactivating the chunkloader";
+  }
 
+  public static boolean activateChunkLoader(ServerLevel world, ServerPlayer player, BlockPos pos) {
+    String dim = world.dimension().location().toString();
+    Map<BlockPos, ChunkLoaderSavedData.ChunkLoader> worldLoaders = chunkLoaders.computeIfAbsent(dim, k -> new HashMap<>());
+
+    ChunkLoaderSavedData.ChunkLoader newChunkLoader = new ChunkLoaderSavedData.ChunkLoader(dim, pos, player);
+
+    worldLoaders.put(pos, newChunkLoader);
+    toggleChunkLoader(world, newChunkLoader, true);
     save(world);
-    if (isActive) {
-      return "Chunk loader turned off, your current limit : " + getPlayerChunkLoaders(player.getUUID()
-                                                                                      .toString()).size() + "/" + DChunkLoaderConfig.MAX_LOADERS_PER_PLAYER.get();
-    } else {
-      return "Chunk loader turned on, your current limit : " + getPlayerChunkLoaders(player.getUUID()
-                                                                                     .toString()).size() + "/" + DChunkLoaderConfig.MAX_LOADERS_PER_PLAYER.get();
+
+    return true;
+  }
+
+  public static boolean removeChunkLoader(ServerLevel world, ChunkLoaderSavedData.ChunkLoader actualChunkLoader) {
+    if (actualChunkLoader == null) {
+      return false;
     }
+
+    BlockPos pos = actualChunkLoader.getPos();
+    String dim = actualChunkLoader.getDimString();
+
+    Map<BlockPos, ChunkLoaderSavedData.ChunkLoader> worldLoaders = chunkLoaders.computeIfAbsent(dim, k -> new HashMap<>());
+
+    worldLoaders.remove(pos);
+    toggleChunkLoader(world, actualChunkLoader, false);
+    save(world);
+
+    return true;
+  }
+
+  public static String canActivateChunkLoader(ServerLevel world, ServerPlayer player, BlockPos pos) {
+    String dim = world.dimension().location().toString();
+    Map<BlockPos, ChunkLoaderSavedData.ChunkLoader> worldLoaders = chunkLoaders.computeIfAbsent(dim, k -> new HashMap<>());
+    ChunkPos chunkPos = new ChunkPos(pos);
+
+    for (ChunkLoaderSavedData.ChunkLoader chunkLoader : worldLoaders.values()) {
+      if (chunkPos.equals(new ChunkPos(chunkLoader.getPos()))) {
+        return "A chunk loader from " + chunkLoader.getOwnerDisplayName() + " is already present in this chunk.";
+      }
+    }
+
+    int maxLoaders = DChunkLoaderConfig.MAX_LOADERS_PER_PLAYER.get();
+    if (getPlayerChunkLoadersCount(player) >= maxLoaders) {
+      return "You have reached the max amount of chunkloader : " + maxLoaders;
+    }
+
+    return null;
+  }
+
+  public static int getPlayerChunkLoadersCount(ServerPlayer player) {
+    return getPlayerChunkLoaders(player.getUUID().toString()).size();
   }
 
   public static void breakBlock(ServerLevel world, BlockPos pos) {
@@ -106,21 +142,33 @@ public class ChunkLoaderManager {
   public static void loadForDimension(ServerLevel world) {
     String dim = world.dimension().location().toString();
 
-    ChunkLoaderSavedData data = world.getDataStorage().computeIfAbsent(
+    MinecraftServer server = world.getServer();
+    ServerLevel overworld = server.getLevel(Level.OVERWORLD);
+    if (overworld == null) {
+      DChunkLoader.LOGGER.error("Error overworld does not exists");
+      DChunkLoader.LOGGER.error("Existing worlds :");
+      for (ServerLevel level : world.getServer().getAllLevels()) {
+        DChunkLoader.LOGGER.error(level.dimension().location().toString());
+      }
+      return;
+    }
+
+    ChunkLoaderSavedData data = overworld.getDataStorage().computeIfAbsent(
     ChunkLoaderSavedData::load, ChunkLoaderSavedData::new, DATA_NAME
     );
 
     Map<String, Map<String, Set<ChunkLoaderSavedData.ChunkLoader>>> allData = data.getChunkLoaders();
-    Map<String, Set<ChunkLoaderSavedData.ChunkLoader>> worldSavedLoaders = allData.computeIfAbsent(dim, k -> new HashMap<>());
+    Map<String, Set<ChunkLoaderSavedData.ChunkLoader>> worldSavedLoaders =
+    allData.computeIfAbsent(dim, k -> new HashMap<>());
+
     Map<BlockPos, ChunkLoaderSavedData.ChunkLoader> worldLoaders = new HashMap<>();
     for (Set<ChunkLoaderSavedData.ChunkLoader> playerSavedLoaders : worldSavedLoaders.values()) {
       for (ChunkLoaderSavedData.ChunkLoader chunkLoader : playerSavedLoaders) {
         worldLoaders.put(chunkLoader.getPos(), chunkLoader);
       }
     }
-    chunkLoaders.put(dim, worldLoaders);
 
-    // Cleanup chunks
+    chunkLoaders.put(dim, worldLoaders);
     for (ChunkLoaderSavedData.ChunkLoader chunkLoader : worldLoaders.values()) {
       toggleChunkLoader(world, chunkLoader, false);
     }
@@ -130,7 +178,18 @@ public class ChunkLoaderManager {
   }
 
   public static void save(ServerLevel world) {
-    ChunkLoaderSavedData data = world.getDataStorage().computeIfAbsent(
+    MinecraftServer server = world.getServer();
+    ServerLevel overworld = server.getLevel(Level.OVERWORLD);
+    if (overworld == null) {
+      DChunkLoader.LOGGER.error("Error overworld does not exists");
+      DChunkLoader.LOGGER.error("Existing worlds :");
+      for (ServerLevel level : world.getServer().getAllLevels()) {
+        DChunkLoader.LOGGER.error(level.dimension().location().toString());
+      }
+      return;
+    }
+
+    ChunkLoaderSavedData data = overworld.getDataStorage().computeIfAbsent(
     ChunkLoaderSavedData::load, ChunkLoaderSavedData::new, DATA_NAME
     );
 
@@ -209,6 +268,10 @@ public class ChunkLoaderManager {
       DChunkLoader.LOGGER.debug("Should unload all chunk loaders for team {}", teamName);
       toggleAllChunkLoadersForTeam(world, teamName, false);
     }
+  }
+
+  public enum ChunkLoaderActivationResult {
+
   }
 
 }
