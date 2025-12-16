@@ -248,7 +248,7 @@ public class ChunkLoaderManager {
     }
   }
 
-  private static void toggleAllChunkLoadersForTeam(ServerLevel world, String teamName, boolean toggle) {
+  public static void toggleAllChunkLoadersForTeam(ServerLevel world, String teamName, boolean toggle) {
     Set<ChunkLoaderSavedData.ChunkLoader> teamChunkLoaders = getTeamChunkLoaders(teamName);
     for (ChunkLoaderSavedData.ChunkLoader chunkLoader : teamChunkLoaders) {
       toggleChunkLoader(world, chunkLoader, toggle);

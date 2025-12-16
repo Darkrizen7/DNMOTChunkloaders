@@ -91,6 +91,12 @@ public class TeamCommands {
       return 0;
     }
     if (TeamManager.removeTeamMember((ServerLevel) player.level(), teamName, player)) {
+      Set<TeamSavedData.TeamMember> teamMembers = TeamManager.getOnlineTeamMembers(source.getLevel(), teamName);
+      teamMembers.remove(new TeamSavedData.TeamMember(player));
+      if (teamMembers.isEmpty()) {
+        DChunkLoader.LOGGER.debug("Should unload all chunk loaders for team {}", teamName);
+        ChunkLoaderManager.toggleAllChunkLoadersForTeam(source.getLevel(), teamName, false);
+      }
       source.sendSystemMessage(Component.literal("You successfully leaved " + teamName));
       return Command.SINGLE_SUCCESS;
     }
@@ -111,7 +117,7 @@ public class TeamCommands {
     Set<TeamSavedData.TeamMember> members = TeamManager.getTeamMembers(teamName);
     source.sendSystemMessage(Component.literal("Team " + teamName));
     source.sendSystemMessage(Component.literal("--------------------"));
-    source.sendSystemMessage(Component.literal("Members " + teamName));
+    source.sendSystemMessage(Component.literal("Members"));
     int i = 1;
     for (TeamSavedData.TeamMember member : members) {
       source.sendSystemMessage(Component.literal(i + ". " + member.getDisplayName()));
