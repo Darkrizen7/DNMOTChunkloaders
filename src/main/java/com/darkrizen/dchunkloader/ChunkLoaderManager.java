@@ -23,6 +23,27 @@ public class ChunkLoaderManager {
     return chunkLoaders;
   }
 
+  public static Map<String, Map<BlockPos, ChunkLoaderSavedData.ChunkLoader>> getActiveChunkLoaders() {
+    Map<String, Map<BlockPos, ChunkLoaderSavedData.ChunkLoader>> activeChunkLoaders = new HashMap<>();
+
+    for (Map.Entry<String, Map<BlockPos, ChunkLoaderSavedData.ChunkLoader>> dimEntry : chunkLoaders.entrySet()) {
+      String dim = dimEntry.getKey();
+      Map<BlockPos, ChunkLoaderSavedData.ChunkLoader> allLoadersInDim = dimEntry.getValue();
+      Map<BlockPos, ChunkLoaderSavedData.ChunkLoader> activeLoadersInDim = new HashMap<>();
+
+      for (Map.Entry<BlockPos, ChunkLoaderSavedData.ChunkLoader> loaderEntry : allLoadersInDim.entrySet()) {
+        ChunkLoaderSavedData.ChunkLoader loader = loaderEntry.getValue();
+        if (loader.isActivated()) {
+          activeLoadersInDim.put(loaderEntry.getKey(), loader);
+        }
+      }
+      if (!activeLoadersInDim.isEmpty()) {
+        activeChunkLoaders.put(dim, activeLoadersInDim);
+      }
+    }
+    return activeChunkLoaders;
+  }
+
   public static String clickChunkLoader(ServerLevel world, ServerPlayer player, BlockPos pos) {
     String dim = world.dimension().location().toString();
     Map<BlockPos, ChunkLoaderSavedData.ChunkLoader> worldLoaders = chunkLoaders.computeIfAbsent(dim, k -> new HashMap<>());
@@ -216,7 +237,6 @@ public class ChunkLoaderManager {
   }
 
   public static void toggleChunkLoader(ServerLevel world, ChunkLoaderSavedData.ChunkLoader chunkLoader, boolean toggle) {
-    DChunkLoader.LOGGER.debug("Setting chunk to forced : here");
     MinecraftServer server = world.getServer();
     ResourceLocation dimRL = ResourceLocation.parse(chunkLoader.getDimString());
     ResourceKey<Level> resKey = ResourceKey.create(Registries.DIMENSION, dimRL);
@@ -224,6 +244,7 @@ public class ChunkLoaderManager {
     if (clWorld != null) {
       ChunkPos chunkPos = new ChunkPos(chunkLoader.getPos());
       clWorld.setChunkForced(chunkPos.x, chunkPos.z, toggle);
+      chunkLoader.setActivated(toggle);
     }
   }
 
