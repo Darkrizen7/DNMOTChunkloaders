@@ -136,8 +136,6 @@ public class ChunkLoaderManager {
     Set<ChunkLoaderSavedData.ChunkLoader> playerChunkLoaders = new HashSet<>();
     for (Map<BlockPos, ChunkLoaderSavedData.ChunkLoader> worldLoaders : chunkLoaders.values()) {
       for (ChunkLoaderSavedData.ChunkLoader chunkLoader : worldLoaders.values()) {
-        DChunkLoader.LOGGER.debug("getOwnerUUID {}", chunkLoader.getOwnerUUID());
-        DChunkLoader.LOGGER.debug("playerUUID {}", playerUUID);
         if (Objects.equals(chunkLoader.getOwnerUUID(), playerUUID)) {
           playerChunkLoaders.add(chunkLoader);
         }
@@ -183,9 +181,21 @@ public class ChunkLoaderManager {
     allData.computeIfAbsent(dim, k -> new HashMap<>());
 
     Map<BlockPos, ChunkLoaderSavedData.ChunkLoader> worldLoaders = new HashMap<>();
+    long now = System.currentTimeMillis();
+    long maxAgeMillis = DChunkLoaderConfig.MAX_CHUNKLOADER_AGE_DAYS.get() * 24L * 60L * 60L * 1000L;
     for (Set<ChunkLoaderSavedData.ChunkLoader> playerSavedLoaders : worldSavedLoaders.values()) {
-      for (ChunkLoaderSavedData.ChunkLoader chunkLoader : playerSavedLoaders) {
-        worldLoaders.put(chunkLoader.getPos(), chunkLoader);
+      Iterator<ChunkLoaderSavedData.ChunkLoader> iter = playerSavedLoaders.iterator();
+      while (iter.hasNext()) {
+        ChunkLoaderSavedData.ChunkLoader chunkLoader = iter.next();
+        long age = now - chunkLoader.getLastActivated();
+
+        if (age > maxAgeMillis) {
+          iter.remove();
+          DChunkLoader.LOGGER.debug("Removed chunk loader at {} from player {} (last activated {} ms ago)",
+                                    chunkLoader.getPos(), chunkLoader.getOwnerUUID(), age);
+        } else {
+          worldLoaders.put(chunkLoader.getPos(), chunkLoader);
+        }
       }
     }
 
@@ -257,7 +267,6 @@ public class ChunkLoaderManager {
 
   private static void toggleAllChunkLoadersForPlayer(ServerLevel world, ServerPlayer player, boolean toggle) {
     Set<ChunkLoaderSavedData.ChunkLoader> playerChunkLoaders = getPlayerChunkLoaders(player.getUUID().toString());
-    DChunkLoader.LOGGER.debug("Player has {}", playerChunkLoaders.size());
     for (ChunkLoaderSavedData.ChunkLoader chunkLoader : playerChunkLoaders) {
       toggleChunkLoader(world, chunkLoader, toggle);
     }
@@ -266,6 +275,7 @@ public class ChunkLoaderManager {
   public static void onPlayerConnected(ServerPlayer player) {
     ServerLevel world = (ServerLevel) player.level();
     String teamName = TeamManager.getTeamForPlayer(player);
+    resetLastActivated(player);
     if (teamName == null) {
       toggleAllChunkLoadersForPlayer(world, player, true);
       return;
@@ -273,26 +283,35 @@ public class ChunkLoaderManager {
     toggleAllChunkLoadersForTeam(world, teamName, true);
   }
 
+  private static void resetLastActivated(ServerPlayer player) {
+    for (Map<BlockPos, ChunkLoaderSavedData.ChunkLoader> worldLoaders : chunkLoaders.values()) {
+      for (ChunkLoaderSavedData.ChunkLoader chunkLoader : worldLoaders.values()) {
+        if (Objects.equals(chunkLoader.getOwnerUUID(), player.getUUID().toString())) {
+          chunkLoader.setLastActivated(System.currentTimeMillis());
+        }
+      }
+    }
+    MinecraftServer server = player.getServer();
+    if (server != null) {
+      ServerLevel overworld = server.getLevel(net.minecraft.world.level.Level.OVERWORLD);
+      if (overworld != null) {
+        save(overworld);
+      }
+    }
+  }
+
   public static void onPlayerDisconnected(ServerPlayer player) {
     ServerLevel world = (ServerLevel) player.level();
     String teamName = TeamManager.getTeamForPlayer(player);
-    DChunkLoader.LOGGER.debug("disco");
 
     if (teamName == null) {
-      DChunkLoader.LOGGER.debug("no team");
       toggleAllChunkLoadersForPlayer(world, player, false);
       return;
     }
     Set<TeamSavedData.TeamMember> teamMembers = TeamManager.getOnlineTeamMembers(world, teamName);
     teamMembers.remove(new TeamSavedData.TeamMember(player));
     if (teamMembers.isEmpty()) {
-      DChunkLoader.LOGGER.debug("Should unload all chunk loaders for team {}", teamName);
       toggleAllChunkLoadersForTeam(world, teamName, false);
     }
   }
-
-  public enum ChunkLoaderActivationResult {
-
-  }
-
 }

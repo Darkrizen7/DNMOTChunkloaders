@@ -12,6 +12,10 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.ChunkPos;
 
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
+import java.time.format.DateTimeFormatter;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Map;
@@ -119,9 +123,16 @@ public class ChunkLoaderCommands {
                                                                                                    .toString());
     source.sendSystemMessage(Component.literal("Chunk Loaders " + playerLoaders.size() + "/" + DChunkLoaderConfig.MAX_LOADERS_PER_PLAYER.get()));
     source.sendSystemMessage(Component.literal("--------------------"));
+    DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm:ss");
+
     int i = 1;
     for (ChunkLoaderSavedData.ChunkLoader chunkLoader : playerLoaders) {
-      source.sendSystemMessage(Component.literal(i + ". " + chunkLoader.getDimString() + " : " + chunkLoader.getPos()));
+      long lastActivatedMillis = chunkLoader.getLastActivated();
+      String lastActivatedReadable = LocalDateTime.ofInstant(
+      Instant.ofEpochMilli(lastActivatedMillis),
+      ZoneId.systemDefault()
+      ).format(formatter);
+      source.sendSystemMessage(Component.literal(i + ". " + chunkLoader.getDimString() + " : " + chunkLoader.getPos() + " | Activated: " + lastActivatedReadable));
       i++;
     }
     return Command.SINGLE_SUCCESS;

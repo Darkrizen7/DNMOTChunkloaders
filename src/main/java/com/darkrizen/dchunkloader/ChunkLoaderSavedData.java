@@ -92,8 +92,8 @@ public class ChunkLoaderSavedData extends SavedData {
     private final BlockPos pos;
     private final String ownerDisplayName;
     private final String ownerUUID;
-    private final long lastActivated;
     private final String dimString;
+    private long lastActivated;
     private boolean activated = false;
 
     public ChunkLoader(String dimString, BlockPos pos, ServerPlayer owner) {
@@ -134,6 +134,10 @@ public class ChunkLoaderSavedData extends SavedData {
 
     public long getLastActivated() {
       return lastActivated;
+    }
+
+    public void setLastActivated(long lastActivated) {
+      this.lastActivated = lastActivated;
     }
 
     public String getDimString() {
