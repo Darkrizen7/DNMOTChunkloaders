@@ -3,10 +3,14 @@ package com.darkrizen.dchunkloader;
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
+import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
 import net.minecraft.commands.arguments.EntityArgument;
+import net.minecraft.network.chat.ClickEvent;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.HoverEvent;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 
@@ -32,31 +36,53 @@ public class TeamCommands {
           )
           .then(Commands.literal("leave").executes(context -> leaveTeam(context.getSource())))
           .then(Commands.literal("info").executes(context -> teamInfo(context.getSource())))
+          .then(Commands.literal("list")
+                .requires(src -> src.hasPermission(2))
+                .executes(context -> listTeams(context.getSource())))
+
     )
     );
   }
 
   private static int createTeam(CommandSourceStack source, String teamName) {
     if (!(source.getEntity() instanceof ServerPlayer player)) {
-      source.sendFailure(Component.literal("Player command only"));
+      source.sendFailure(Component.literal("This command can only be used by players."));
       return 0;
     }
+
     String actualTeamName = TeamManager.getTeamForPlayer(player);
     if (actualTeamName != null) {
-      source.sendFailure(Component.literal("You are already in a team do /dcl teams leave"));
+      MutableComponent leaveCommand = Component.literal("/dcl teams leave")
+      .withStyle(style -> style
+      .withColor(ChatFormatting.YELLOW)
+      .withUnderlined(true)
+      .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/dcl teams leave"))
+      .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.literal("Click to leave your current team"))));
+
+      source.sendFailure(Component.literal("You are already in a team. Please use ")
+                         .append(leaveCommand)
+                         .append(Component.literal(" first.").withStyle(ChatFormatting.RED)));
       return 0;
     }
+
     switch (TeamManager.createTeam((ServerLevel) player.level(), teamName, player)) {
       case PLAYER_ALREADY_HAS_TEAM -> {
-        source.sendFailure(Component.literal("You are already in a team do /dcl teams leave"));
+        source.sendFailure(Component.literal("You are already in a team."));
         return 0;
       }
       case TEAM_ALREADY_EXISTS -> {
-        source.sendSystemMessage(Component.literal("A team with name " + teamName + " already exists."));
+        source.sendFailure(Component.literal("A team named ")
+                           .append(Component.literal(teamName).withStyle(ChatFormatting.WHITE))
+                           .append(" already exists."));
         return 0;
       }
       case SUCCESS -> {
-        source.sendSystemMessage(Component.literal("You successfully created " + teamName));
+        source.sendSystemMessage(Component.literal("Success! ")
+                                 .withStyle(ChatFormatting.GREEN)
+                                 .append(Component.literal("You created team ")
+                                         .withStyle(ChatFormatting.WHITE))
+                                 .append(Component.literal(teamName)
+                                         .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD)));
         return Command.SINGLE_SUCCESS;
       }
     }
@@ -65,115 +91,248 @@ public class TeamCommands {
 
   private static int deleteTeam(CommandSourceStack source) {
     if (!(source.getEntity() instanceof ServerPlayer player)) {
-      source.sendFailure(Component.literal("Player command only"));
+      source.sendFailure(Component.literal("This command can only be used by players."));
       return 0;
     }
+
     String teamName = TeamManager.getTeamForPlayer(player);
     if (teamName == null) {
-      source.sendFailure(Component.literal("You are not in a team"));
+      source.sendFailure(Component.literal("You are not currently in a team."));
       return 0;
     }
+
     if (TeamManager.deleteTeam((ServerLevel) player.level(), teamName)) {
-      source.sendSystemMessage(Component.literal("You successfully deleted " + teamName));
+      source.sendSystemMessage(Component.literal("Success! ")
+                               .withStyle(ChatFormatting.GREEN)
+                               .append(Component.literal("The team ")
+                                       .withStyle(ChatFormatting.WHITE))
+                               .append(Component.literal(teamName)
+                                       .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD))
+                               .append(Component.literal(" has been deleted.")
+                                       .withStyle(ChatFormatting.WHITE)));
+
       return Command.SINGLE_SUCCESS;
     }
-    return 0; // Should never happen
+
+    source.sendFailure(Component.literal("An internal error occurred while deleting ")
+                       .append(Component.literal(teamName).withStyle(ChatFormatting.WHITE)));
+    return 0;
   }
 
   private static int leaveTeam(CommandSourceStack source) {
     if (!(source.getEntity() instanceof ServerPlayer player)) {
-      source.sendFailure(Component.literal("Player command only"));
+      source.sendFailure(Component.literal("This command can only be used by players."));
       return 0;
     }
+
     String teamName = TeamManager.getTeamForPlayer(player);
     if (teamName == null) {
-      source.sendFailure(Component.literal("You are not in a team"));
+      source.sendFailure(Component.literal("You are not currently in a team."));
       return 0;
     }
+
     if (TeamManager.removeTeamMember((ServerLevel) player.level(), teamName, player)) {
       Set<TeamSavedData.TeamMember> teamMembers = TeamManager.getOnlineTeamMembers(source.getLevel(), teamName);
       teamMembers.remove(new TeamSavedData.TeamMember(player));
+
       if (teamMembers.isEmpty()) {
         DChunkLoader.LOGGER.debug("Should unload all chunk loaders for team {}", teamName);
         ChunkLoaderManager.toggleAllChunkLoadersForTeam(source.getLevel(), teamName, false);
       }
-      source.sendSystemMessage(Component.literal("You successfully leaved " + teamName));
+
+      source.sendSystemMessage(Component.literal("Success! ")
+                               .withStyle(ChatFormatting.GREEN)
+                               .append(Component.literal("You have left team ")
+                                       .withStyle(ChatFormatting.WHITE))
+                               .append(Component.literal(teamName)
+                                       .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD)));
+
       return Command.SINGLE_SUCCESS;
     }
-    source.sendFailure(Component.literal("Error leaving team"));
-    return 0; // Should never happen
+
+    source.sendFailure(Component.literal("An internal error occurred while leaving ")
+                       .append(Component.literal(teamName).withStyle(ChatFormatting.WHITE)));
+    return 0;
   }
 
   private static int teamInfo(CommandSourceStack source) {
     if (!(source.getEntity() instanceof ServerPlayer player)) {
-      source.sendFailure(Component.literal("Player command only"));
+      source.sendFailure(Component.literal("This command can only be used by players."));
       return 0;
     }
+
     String teamName = TeamManager.getTeamForPlayer(player);
     if (teamName == null) {
-      source.sendFailure(Component.literal("You are not in a team"));
+      source.sendFailure(Component.literal("You are not currently in a team."));
       return 0;
     }
-    Set<TeamSavedData.TeamMember> members = TeamManager.getTeamMembers(teamName);
-    source.sendSystemMessage(Component.literal("Team " + teamName));
-    source.sendSystemMessage(Component.literal("--------------------"));
-    source.sendSystemMessage(Component.literal("Members"));
-    int i = 1;
-    for (TeamSavedData.TeamMember member : members) {
-      source.sendSystemMessage(Component.literal(i + ". " + member.getDisplayName()));
-      i++;
+
+    Set<TeamSavedData.TeamMember> teamMembers = TeamManager.getTeamMembers(teamName);
+    Set<TeamSavedData.TeamMember> onlineMembers = TeamManager.getOnlineTeamMembers(source.getLevel(), teamName);
+
+    source.sendSystemMessage(Component.literal("\n--- TEAM INFO ---")
+                             .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));
+    source.sendSystemMessage(Component.literal("Team: ").withStyle(ChatFormatting.GRAY)
+                             .append(Component.literal(teamName)
+                                     .withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD)));
+
+    source.sendSystemMessage(Component.literal("Status: ").withStyle(ChatFormatting.GRAY)
+                             .append(Component.literal(onlineMembers.size() + "/" + teamMembers.size() + " players online")
+                                     .withStyle(onlineMembers.isEmpty() ? ChatFormatting.RED : ChatFormatting.GREEN)));
+
+    source.sendSystemMessage(Component.literal("--------------------").withStyle(ChatFormatting.DARK_GRAY));
+    source.sendSystemMessage(Component.literal("Members:").withStyle(ChatFormatting.GRAY, ChatFormatting.ITALIC));
+
+    for (TeamSavedData.TeamMember member : teamMembers) {
+      boolean isOnline = Util.isPlayerOnline(source.getLevel(), member.getUuid());
+
+      MutableComponent memberLine = Component.literal("  └─ ").withStyle(ChatFormatting.DARK_GRAY)
+      .append(Component.literal(member.getDisplayName())
+              .withStyle(isOnline ? ChatFormatting.GREEN : ChatFormatting.DARK_RED));
+
+      if (isOnline) {
+        memberLine.append(Component.literal(" ●").withStyle(ChatFormatting.GREEN));
+      }
+
+      source.sendSystemMessage(memberLine);
     }
+
+    source.sendSystemMessage(Component.literal("--------------------").withStyle(ChatFormatting.DARK_GRAY));
+
     return Command.SINGLE_SUCCESS;
   }
 
   private static int invite(CommandSourceStack source, ServerPlayer target) {
     if (!(source.getEntity() instanceof ServerPlayer player)) {
-      source.sendFailure(Component.literal("Player command only"));
+      source.sendFailure(Component.literal("This command can only be used by players."));
       return 0;
     }
+
     String teamName = TeamManager.getTeamForPlayer(player);
     if (teamName == null) {
-      source.sendFailure(Component.literal("You are not in a team"));
+      source.sendFailure(Component.literal("You are not currently in a team."));
       return 0;
     }
+
     if (player.equals(target)) {
-      source.sendSystemMessage(Component.literal("You cannot invite yourself to a team"));
+      source.sendFailure(Component.literal("You cannot invite yourself to a team."));
       return 0;
     }
+
     switch (TeamManager.inviteToTeam((ServerLevel) player.level(), teamName, target)) {
       case SUCCESS -> {
-        source.sendSystemMessage(Component.literal("You successfully invited ").append(target.getDisplayName()));
-        target.sendSystemMessage(Component.literal("You were invited to " + teamName + " type /dcl teams join " + teamName));
+        source.sendSystemMessage(Component.literal("Invitation sent to ")
+                                 .withStyle(ChatFormatting.GREEN)
+                                 .append(target.getDisplayName().copy().withStyle(ChatFormatting.WHITE)));
+
+        MutableComponent joinCommand = Component.literal("/dcl teams join " + teamName)
+        .withStyle(style -> style
+        .withColor(ChatFormatting.AQUA)
+        .withUnderlined(true)
+        .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/dcl teams join " + teamName))
+        .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.literal("Click to join " + teamName))));
+
+        target.sendSystemMessage(Component.literal("\n--- TEAM INVITATION ---")
+                                 .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));
+        target.sendSystemMessage(Component.literal("You have been invited to join ")
+                                 .append(Component.literal(teamName).withStyle(ChatFormatting.YELLOW))
+                                 .append("\nClick here to join: ")
+                                 .append(joinCommand));
+
         return Command.SINGLE_SUCCESS;
       }
-      case PLAYER_ALREADY_INVITED -> source.sendFailure(Component.literal("Someone has already invited ")
+      case PLAYER_ALREADY_INVITED -> source.sendFailure(Component.literal("A pending invitation already exists for ")
                                                         .append(target.getDisplayName()));
-      case TEAM_NAME_DOES_NOT_EXISTS -> source.sendFailure(Component.literal("Error inviting ")
-                                                           .append(target.getDisplayName()));
+      case TEAM_NAME_DOES_NOT_EXISTS -> source.sendFailure(Component.literal("The team ")
+                                                           .append(Component.literal(teamName)
+                                                                   .withStyle(ChatFormatting.WHITE))
+                                                           .append(" no longer exists."));
     }
     return 0;
   }
 
   private static int joinTeam(CommandSourceStack source, String teamName) {
     if (!(source.getEntity() instanceof ServerPlayer player)) {
-      source.sendFailure(Component.literal("Player command only"));
+      source.sendFailure(Component.literal("This command can only be used by players."));
       return 0;
     }
+
     String actualTeamName = TeamManager.getTeamForPlayer(player);
     if (actualTeamName != null) {
-      source.sendFailure(Component.literal("You are already in a team do /dcl teams leave"));
+      MutableComponent commandComponent = Component.literal("/dcl teams leave")
+      .withStyle(style -> style
+      .withColor(ChatFormatting.YELLOW)
+      .withUnderlined(true)
+      .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/dcl teams leave"))
+      .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.literal("Click to leave your current team"))));
+
+      source.sendFailure(Component.literal("You are already in a team. Please use ")
+                         .append(commandComponent)
+                         .append(Component.literal(" first.").withStyle(ChatFormatting.RED)));
       return 0;
     }
+
     if (TeamManager.isInvited((ServerLevel) player.level(), teamName, player)) {
       if (TeamManager.addTeamMember((ServerLevel) player.level(), teamName, player)) {
-        source.sendSystemMessage(Component.literal("You successfully joined " + teamName));
+        source.sendSystemMessage(Component.literal("Success! ")
+                                 .withStyle(ChatFormatting.GREEN)
+                                 .append(Component.literal("You joined team ")
+                                         .withStyle(ChatFormatting.WHITE))
+                                 .append(Component.literal(teamName)
+                                         .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD)));
         return Command.SINGLE_SUCCESS;
       } else {
-        source.sendFailure(Component.literal("Error joining " + teamName));
+        source.sendFailure(Component.literal("An internal error occurred while joining ")
+                           .append(Component.literal(teamName).withStyle(ChatFormatting.WHITE)));
         return 0;
       }
     }
-    source.sendFailure(Component.literal("You were not invited to " + teamName));
+
+    source.sendFailure(Component.literal("You have not been invited to join ")
+                       .append(Component.literal(teamName).withStyle(ChatFormatting.WHITE)));
     return 0;
+  }
+
+  private static int listTeams(CommandSourceStack source) {
+    if ((source.getEntity() instanceof ServerPlayer) && !source.hasPermission(2)) {
+      source.sendFailure(Component.literal("You must be an admin to use this command"));
+      return 0;
+    }
+    source.sendSystemMessage(Component.literal("\n--- TEAM LIST ---")
+                             .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));
+    source.sendSystemMessage(Component.literal("====================").withStyle(ChatFormatting.GRAY));
+
+    int teamCount = 1;
+    for (String teamName : TeamManager.getTeamNames()) {
+      Set<TeamSavedData.TeamMember> teamMembers = TeamManager.getTeamMembers(teamName);
+      Set<TeamSavedData.TeamMember> onlineMembers = TeamManager.getOnlineTeamMembers(source.getLevel(), teamName);
+
+      MutableComponent teamHeader = Component.literal(teamCount + ". " + teamName)
+      .withStyle(ChatFormatting.YELLOW)
+      .append(Component.literal(" [").withStyle(ChatFormatting.GRAY))
+      .append(Component.literal(onlineMembers.size() + "/" + teamMembers.size())
+              .withStyle(onlineMembers.isEmpty() ? ChatFormatting.RED : ChatFormatting.GREEN))
+      .append(Component.literal(" online]").withStyle(ChatFormatting.GRAY));
+
+      source.sendSystemMessage(teamHeader);
+
+      for (TeamSavedData.TeamMember member : teamMembers) {
+        boolean isOnline = Util.isPlayerOnline(source.getLevel(), member.getUuid());
+
+        MutableComponent memberLine = Component.literal("  └─ ").withStyle(ChatFormatting.DARK_GRAY)
+        .append(Component.literal(member.getDisplayName())
+                .withStyle(isOnline ? ChatFormatting.GREEN : ChatFormatting.DARK_RED));
+
+        if (isOnline) {
+          memberLine.append(Component.literal(" ●").withStyle(ChatFormatting.GREEN));
+        }
+
+        source.sendSystemMessage(memberLine);
+      }
+
+      source.sendSystemMessage(Component.literal("--------------------").withStyle(ChatFormatting.DARK_GRAY));
+      teamCount++;
+    }
+    return Command.SINGLE_SUCCESS;
   }
 }

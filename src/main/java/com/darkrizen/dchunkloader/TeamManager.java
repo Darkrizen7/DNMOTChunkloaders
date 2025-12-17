@@ -4,7 +4,10 @@ import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.level.Level;
 
-import java.util.*;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 
 public class TeamManager {
   private static final String DATA_NAME = "dchunkloader_teams";
@@ -67,6 +70,10 @@ public class TeamManager {
     return true;
   }
 
+  public static Set<String> getTeamNames() {
+    return teams.keySet();
+  }
+
   public static Set<TeamSavedData.TeamMember> getTeamMembers(String teamName) {
     return teams.getOrDefault(teamName, new HashSet<>());
   }
@@ -75,9 +82,7 @@ public class TeamManager {
     Set<TeamSavedData.TeamMember> teamMembers = getTeamMembers(teamName);
     Set<TeamSavedData.TeamMember> onlineTeamMembers = new HashSet<>();
     for (TeamSavedData.TeamMember teamMember : teamMembers) {
-      if (world.getServer()
-      .getPlayerList()
-      .getPlayer(UUID.fromString(teamMember.getUuid())) != null) {
+      if (Util.isPlayerOnline(world, teamMember.getUuid())) {
         onlineTeamMembers.add(teamMember);
       }
     }
