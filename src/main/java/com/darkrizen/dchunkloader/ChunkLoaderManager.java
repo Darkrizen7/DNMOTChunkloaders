@@ -44,7 +44,7 @@ public class ChunkLoaderManager {
     return activeChunkLoaders;
   }
 
-  public static String clickChunkLoader(ServerLevel world, ServerPlayer player, BlockPos pos) {
+  public static ActivateChunkLoaderResult clickChunkLoader(ServerLevel world, ServerPlayer player, BlockPos pos) {
     String dim = world.dimension().location().toString();
     Map<BlockPos, ChunkLoaderSavedData.ChunkLoader> worldLoaders = chunkLoaders.computeIfAbsent(dim, k -> new HashMap<>());
 
@@ -53,18 +53,18 @@ public class ChunkLoaderManager {
 
     if (isActive) {
       if (removeChunkLoader(world, actualChunkLoader)) {
-        return "Chunk loader turned off, your current limit : " + getPlayerChunkLoadersCount(player) + "/" + DChunkLoaderConfig.MAX_LOADERS_PER_PLAYER.get();
+        return ActivateChunkLoaderResult.SUCCESS_OFF;
       }
     } else {
-      String validationMessage = canActivateChunkLoader(world, player, pos);
-      if (validationMessage != null) {
-        return validationMessage;
+      ActivateChunkLoaderResult result = canActivateChunkLoader(world, player, pos);
+      if (result != ActivateChunkLoaderResult.SUCCESS) {
+        return result;
       }
       if (activateChunkLoader(world, player, pos)) {
-        return "Chunk loader turned on, your current limit : " + getPlayerChunkLoadersCount(player) + "/" + DChunkLoaderConfig.MAX_LOADERS_PER_PLAYER.get();
+        return ActivateChunkLoaderResult.SUCCESS_ON;
       }
     }
-    return "Error activating/deactivating the chunkloader";
+    return ActivateChunkLoaderResult.INTERNAL_ERROR;
   }
 
   public static boolean activateChunkLoader(ServerLevel world, ServerPlayer player, BlockPos pos) {
@@ -97,23 +97,23 @@ public class ChunkLoaderManager {
     return true;
   }
 
-  public static String canActivateChunkLoader(ServerLevel world, ServerPlayer player, BlockPos pos) {
+  public static ActivateChunkLoaderResult canActivateChunkLoader(ServerLevel world, ServerPlayer player, BlockPos pos) {
     String dim = world.dimension().location().toString();
     Map<BlockPos, ChunkLoaderSavedData.ChunkLoader> worldLoaders = chunkLoaders.computeIfAbsent(dim, k -> new HashMap<>());
     ChunkPos chunkPos = new ChunkPos(pos);
 
     for (ChunkLoaderSavedData.ChunkLoader chunkLoader : worldLoaders.values()) {
       if (chunkPos.equals(new ChunkPos(chunkLoader.getPos()))) {
-        return "A chunk loader from " + chunkLoader.getOwnerDisplayName() + " is already present in this chunk.";
+        return ActivateChunkLoaderResult.CHUNK_LOADER_ALREADY_PRESENT;
       }
     }
 
     int maxLoaders = DChunkLoaderConfig.MAX_LOADERS_PER_PLAYER.get();
     if (getPlayerChunkLoadersCount(player) >= maxLoaders) {
-      return "You have reached the max amount of chunkloader : " + maxLoaders;
+      return ActivateChunkLoaderResult.MAX_AMOUNT_REACHED;
     }
 
-    return null;
+    return ActivateChunkLoaderResult.SUCCESS;
   }
 
   public static int getPlayerChunkLoadersCount(ServerPlayer player) {
@@ -313,5 +313,14 @@ public class ChunkLoaderManager {
     if (teamMembers.isEmpty()) {
       toggleAllChunkLoadersForTeam(world, teamName, false);
     }
+  }
+
+  public enum ActivateChunkLoaderResult {
+    SUCCESS,
+    CHUNK_LOADER_ALREADY_PRESENT,
+    MAX_AMOUNT_REACHED,
+    SUCCESS_ON,
+    SUCCESS_OFF,
+    INTERNAL_ERROR
   }
 }

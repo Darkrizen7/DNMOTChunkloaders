@@ -1,7 +1,9 @@
 package com.darkrizen.dchunkloader;
 
+import net.minecraft.ChatFormatting;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerLevel;
@@ -44,8 +46,47 @@ public class ChunkLoaderEvents {
     if (activationItem == null) activationItem = Items.STICK;
     if (player.getItemInHand(InteractionHand.MAIN_HAND).getItem() != activationItem) return;
 
-    String outputMessage = ChunkLoaderManager.clickChunkLoader((ServerLevel) world, player, pos);
-    player.sendSystemMessage(Component.literal(outputMessage));
+    ChunkLoaderManager.ActivateChunkLoaderResult result = ChunkLoaderManager.clickChunkLoader((ServerLevel) world, player, pos);
+    MutableComponent message = Component.literal("");
+
+    int current = ChunkLoaderManager.getPlayerChunkLoaders(player.getUUID().toString()).size();
+    int max = DChunkLoaderConfig.MAX_LOADERS_PER_PLAYER.get();
+
+    switch (result) {
+      case SUCCESS_ON -> {
+        message = Component.literal("✔ ").withStyle(ChatFormatting.GREEN)
+        .append(Component.literal("Chunk loader ").withStyle(ChatFormatting.WHITE))
+        .append(Component.literal("ENABLED").withStyle(ChatFormatting.GREEN, ChatFormatting.BOLD))
+        .append(Component.literal(" (").withStyle(ChatFormatting.GRAY))
+        .append(Component.literal(current + "/" + max).withStyle(ChatFormatting.AQUA))
+        .append(Component.literal(")").withStyle(ChatFormatting.GRAY));
+      }
+      case SUCCESS_OFF -> {
+        message = Component.literal("✘ ").withStyle(ChatFormatting.RED)
+        .append(Component.literal("Chunk loader ").withStyle(ChatFormatting.WHITE))
+        .append(Component.literal("DISABLED").withStyle(ChatFormatting.RED, ChatFormatting.BOLD))
+        .append(Component.literal(" (").withStyle(ChatFormatting.GRAY))
+        .append(Component.literal(current + "/" + max).withStyle(ChatFormatting.AQUA))
+        .append(Component.literal(")").withStyle(ChatFormatting.GRAY));
+      }
+      case INTERNAL_ERROR -> {
+        message = Component.literal("⚠ ").withStyle(ChatFormatting.DARK_RED)
+        .append(Component.literal("Internal error. Please contact an administrator.").withStyle(ChatFormatting.RED));
+      }
+      case MAX_AMOUNT_REACHED -> {
+        message = Component.literal("⚠ ").withStyle(ChatFormatting.GOLD)
+        .append(Component.literal("Limit reached! ").withStyle(ChatFormatting.RED))
+        .append(Component.literal("You are at ").withStyle(ChatFormatting.WHITE))
+        .append(Component.literal(current + "/" + max).withStyle(ChatFormatting.YELLOW, ChatFormatting.BOLD))
+        .append(Component.literal(" loaders.").withStyle(ChatFormatting.WHITE));
+      }
+      case CHUNK_LOADER_ALREADY_PRESENT -> {
+        message = Component.literal("⚠ ").withStyle(ChatFormatting.YELLOW)
+        .append(Component.literal("A chunk loader is already active in this chunk.").withStyle(ChatFormatting.WHITE));
+      }
+    }
+
+    player.sendSystemMessage(message);
   }
 
   @SubscribeEvent
