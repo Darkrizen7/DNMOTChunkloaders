@@ -35,7 +35,12 @@ public class TeamCommands {
                       .executes(context -> invite(context.getSource(), EntityArgument.getPlayer(context, "player"))))
           )
           .then(Commands.literal("leave").executes(context -> leaveTeam(context.getSource())))
-          .then(Commands.literal("info").executes(context -> teamInfo(context.getSource())))
+          .then(Commands.literal("info")
+                .executes(context -> teamInfo(context.getSource()))
+                .then(Commands.argument("name", StringArgumentType.string())
+                      .requires(src -> src.hasPermission(2))
+                      .executes(context -> teamInfo(context.getSource(), StringArgumentType.getString(context, "name")))))
+
           .then(Commands.literal("list")
                 .requires(src -> src.hasPermission(2))
                 .executes(context -> listTeams(context.getSource())))
@@ -160,13 +165,15 @@ public class TeamCommands {
       source.sendFailure(Component.literal("This command can only be used by players."));
       return 0;
     }
-
     String teamName = TeamManager.getTeamForPlayer(player);
+    return teamInfo(source, teamName);
+  }
+
+  private static int teamInfo(CommandSourceStack source, String teamName) {
     if (teamName == null) {
       source.sendFailure(Component.literal("You are not currently in a team."));
       return 0;
     }
-
     Set<TeamSavedData.TeamMember> teamMembers = TeamManager.getTeamMembers(teamName);
     Set<TeamSavedData.TeamMember> onlineMembers = TeamManager.getOnlineTeamMembers(source.getLevel(), teamName);
 
@@ -294,11 +301,12 @@ public class TeamCommands {
   }
 
   private static int listTeams(CommandSourceStack source) {
-    if ((source.getEntity() instanceof ServerPlayer) && !source.hasPermission(2)) {
-      source.sendFailure(Component.literal("You must be an admin to use this command"));
+    if (!(source.getEntity() instanceof ServerPlayer player)) {
+      source.sendFailure(Component.literal("This command can only be used by players."));
       return 0;
     }
-    source.sendSystemMessage(Component.literal("\n--- TEAM LIST ---")
+
+    source.sendSystemMessage(Component.literal("\n--- TEAMS ---")
                              .withStyle(ChatFormatting.GOLD, ChatFormatting.BOLD));
     source.sendSystemMessage(Component.literal("====================").withStyle(ChatFormatting.GRAY));
 
@@ -306,33 +314,27 @@ public class TeamCommands {
     for (String teamName : TeamManager.getTeamNames()) {
       Set<TeamSavedData.TeamMember> teamMembers = TeamManager.getTeamMembers(teamName);
       Set<TeamSavedData.TeamMember> onlineMembers = TeamManager.getOnlineTeamMembers(source.getLevel(), teamName);
+      int chunkLoadersAmount = ChunkLoaderManager.getTeamChunkLoaders(teamName).size();
 
-      MutableComponent teamHeader = Component.literal(teamCount + ". " + teamName)
-      .withStyle(ChatFormatting.YELLOW)
+      ChatFormatting statusColor = onlineMembers.isEmpty() ? ChatFormatting.RED : ChatFormatting.GREEN;
+
+      MutableComponent teamLine = Component.literal(teamCount + ". " + teamName)
+      .withStyle(style -> style
+      .withColor(ChatFormatting.YELLOW)
+      .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, "/dcl teams info " + teamName))
+      .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.literal("Click to view details for " + teamName))))
       .append(Component.literal(" [").withStyle(ChatFormatting.GRAY))
       .append(Component.literal(onlineMembers.size() + "/" + teamMembers.size())
-              .withStyle(onlineMembers.isEmpty() ? ChatFormatting.RED : ChatFormatting.GREEN))
-      .append(Component.literal(" online]").withStyle(ChatFormatting.GRAY));
+              .withStyle(statusColor))
+      .append(Component.literal(" online]").withStyle(ChatFormatting.GRAY))
+      .append(Component.literal(" - ").withStyle(ChatFormatting.DARK_GRAY))
+      .append(Component.literal(chunkLoadersAmount + " Loaders").withStyle(ChatFormatting.AQUA));
 
-      source.sendSystemMessage(teamHeader);
-
-      for (TeamSavedData.TeamMember member : teamMembers) {
-        boolean isOnline = Util.isPlayerOnline(source.getLevel(), member.getUuid());
-
-        MutableComponent memberLine = Component.literal("  └─ ").withStyle(ChatFormatting.DARK_GRAY)
-        .append(Component.literal(member.getDisplayName())
-                .withStyle(isOnline ? ChatFormatting.GREEN : ChatFormatting.DARK_RED));
-
-        if (isOnline) {
-          memberLine.append(Component.literal(" ●").withStyle(ChatFormatting.GREEN));
-        }
-
-        source.sendSystemMessage(memberLine);
-      }
-
-      source.sendSystemMessage(Component.literal("--------------------").withStyle(ChatFormatting.DARK_GRAY));
+      source.sendSystemMessage(teamLine);
       teamCount++;
     }
+
+    source.sendSystemMessage(Component.literal("====================").withStyle(ChatFormatting.GRAY));
     return Command.SINGLE_SUCCESS;
   }
 }

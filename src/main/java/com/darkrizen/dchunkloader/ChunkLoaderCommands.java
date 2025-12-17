@@ -2,6 +2,7 @@ package com.darkrizen.dchunkloader;
 
 import com.mojang.brigadier.Command;
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.StringArgumentType;
 import net.minecraft.ChatFormatting;
 import net.minecraft.commands.CommandSourceStack;
 import net.minecraft.commands.Commands;
@@ -36,6 +37,11 @@ public class ChunkLoaderCommands {
                 .then(Commands.literal("actives")
                       .requires(src -> src.hasPermission(2))
                       .executes(context -> listActives(context.getSource())))
+                .then(Commands.literal("team")
+                      .requires(src -> src.hasPermission(2))
+                      .then(Commands.argument("name", StringArgumentType.string())
+                            .executes(context -> listTeam(context.getSource(), StringArgumentType.getString(context, "name")))
+                      ))
                 .then(Commands.argument("player", EntityArgument.player())
                       .requires(src -> src.hasPermission(2))
                       .executes(context -> listChunkLoader(context.getSource(), EntityArgument.getPlayer(context, "player"))))
@@ -151,6 +157,69 @@ public class ChunkLoaderCommands {
     return Command.SINGLE_SUCCESS;
   }
 
+  private static int listTeam(CommandSourceStack source, String teamName) {
+    if ((source.getEntity() instanceof ServerPlayer) && !source.hasPermission(2)) {
+      source.sendFailure(Component.literal("You must be an admin to use this command."));
+      return 0;
+    }
+
+    Set<ChunkLoaderSavedData.ChunkLoader> teamLoaders = ChunkLoaderManager.getTeamChunkLoaders(teamName);
+    int current = teamLoaders.size();
+    DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm:ss");
+
+    source.sendSystemMessage(Component.literal("\n--- ADMIN INSPECTION ---")
+                             .withStyle(ChatFormatting.RED, ChatFormatting.BOLD));
+    source.sendSystemMessage(Component.literal("Team: ").withStyle(ChatFormatting.GRAY)
+                             .append(Component.literal(teamName).withStyle(ChatFormatting.WHITE)));
+
+    MutableComponent statusLine = Component.literal("Loaders: ").withStyle(ChatFormatting.GRAY)
+    .append(Component.literal(String.valueOf(current))
+            .withStyle(ChatFormatting.WHITE));
+    source.sendSystemMessage(statusLine);
+
+    source.sendSystemMessage(Component.literal("--------------------").withStyle(ChatFormatting.DARK_GRAY));
+
+    int i = 1;
+    for (ChunkLoaderSavedData.ChunkLoader chunkLoader : teamLoaders) {
+      long lastActivatedMillis = chunkLoader.getLastActivated();
+      String lastActivatedReadable = LocalDateTime.ofInstant(
+      Instant.ofEpochMilli(lastActivatedMillis),
+      ZoneId.systemDefault()
+      ).format(formatter);
+
+      String posString = chunkLoader.getPos().getX() + ", " + chunkLoader.getPos().getY() + ", " + chunkLoader.getPos()
+      .getZ();
+      String tpCommand = "/tp " + chunkLoader.getPos().getX() + " " + chunkLoader.getPos()
+      .getY() + " " + chunkLoader.getPos()
+      .getZ();
+
+      MutableComponent loaderLine = Component.literal(i + ". ")
+      .withStyle(ChatFormatting.YELLOW)
+      .append(Component.literal(chunkLoader.getDimString().split(":")[1].toUpperCase())
+              .withStyle(ChatFormatting.AQUA))
+      .append(Component.literal(" at ").withStyle(ChatFormatting.GRAY))
+      .append(Component.literal("[" + posString + "]")
+              .withStyle(style -> style
+              .withColor(ChatFormatting.WHITE)
+              .withUnderlined(true)
+              .withClickEvent(new ClickEvent(ClickEvent.Action.RUN_COMMAND, tpCommand))
+              .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.literal("Click to teleport")))))
+      .append(Component.literal(" - ").withStyle(ChatFormatting.WHITE))
+      .append(Component.literal(chunkLoader.getOwnerDisplayName()).withStyle(ChatFormatting.BLUE, ChatFormatting.BOLD));
+
+
+      source.sendSystemMessage(loaderLine);
+      source.sendSystemMessage(Component.literal("   └─ Last Activation: ").withStyle(ChatFormatting.DARK_GRAY)
+                               .append(Component.literal(lastActivatedReadable).withStyle(ChatFormatting.GRAY)));
+
+      i++;
+    }
+
+    source.sendSystemMessage(Component.literal("--------------------").withStyle(ChatFormatting.DARK_GRAY));
+
+    return Command.SINGLE_SUCCESS;
+  }
+
   private static int listChunkLoader(CommandSourceStack source, ServerPlayer target) {
     if ((source.getEntity() instanceof ServerPlayer) && !source.hasPermission(2)) {
       source.sendFailure(Component.literal("You must be an admin to use this command."));
@@ -202,7 +271,7 @@ public class ChunkLoaderCommands {
               .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT, Component.literal("Click to teleport")))));
 
       source.sendSystemMessage(loaderLine);
-      source.sendSystemMessage(Component.literal("   └─ Last Seen: ").withStyle(ChatFormatting.DARK_GRAY)
+      source.sendSystemMessage(Component.literal("   └─ Last Activation: ").withStyle(ChatFormatting.DARK_GRAY)
                                .append(Component.literal(lastActivatedReadable).withStyle(ChatFormatting.GRAY)));
 
       i++;
