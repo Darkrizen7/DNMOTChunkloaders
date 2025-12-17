@@ -80,3 +80,5 @@ You can customize the mod behavior in the `config/dchunkloader-server.toml` file
 
 **Note**: This mod is designed for server administrators who want a fair and performance-friendly chunk loading system
 for their community.
+
+**Post Note**: This mod was made for Traumatic TFG Server.
