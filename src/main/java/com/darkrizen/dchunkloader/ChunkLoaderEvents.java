@@ -8,6 +8,7 @@ import net.minecraft.resources.ResourceLocation;
 import net.minecraft.server.level.ServerLevel;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.InteractionResult;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.Items;
 import net.minecraft.world.level.Level;
@@ -18,6 +19,7 @@ import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.event.entity.player.PlayerInteractEvent;
 import net.minecraftforge.event.level.BlockEvent;
 import net.minecraftforge.event.level.LevelEvent;
+import net.minecraftforge.eventbus.api.Event;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.registries.ForgeRegistries;
@@ -82,6 +84,15 @@ public class ChunkLoaderEvents {
         .append(Component.literal("A chunk loader is already active in this chunk.").withStyle(ChatFormatting.WHITE));
       }
     }
+
+    // Cancel the event (bc stick is placing ... thanks TFG)
+    if (event.isCancelable()) {
+      event.setCanceled(true);
+    }
+    event.setUseBlock(Event.Result.DENY);
+    event.setUseItem(Event.Result.DENY);
+
+    event.setCancellationResult(InteractionResult.SUCCESS);
 
     player.sendSystemMessage(message);
   }
