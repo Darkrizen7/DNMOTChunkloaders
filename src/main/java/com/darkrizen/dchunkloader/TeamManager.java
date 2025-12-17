@@ -14,6 +14,10 @@ public class TeamManager {
   private static final Map<String, Set<String>> pendingInvites = new HashMap<>();
   private static Map<String, Set<TeamSavedData.TeamMember>> teams = new HashMap<>();
 
+  public static Map<String, Set<TeamSavedData.TeamMember>> getTeams() {
+    return teams;
+  }
+
   public static TeamCreationResult createTeam(ServerLevel world, String teamName, ServerPlayer player) {
     if (teams.containsKey(teamName))
       return TeamCreationResult.TEAM_ALREADY_EXISTS;
@@ -101,7 +105,7 @@ public class TeamManager {
     return null;
   }
 
-  private static void save(ServerLevel world) {
+  public static void save(ServerLevel world) {
     ServerLevel overworld = world.getServer().getLevel(Level.OVERWORLD);
     if (overworld == null) {
       DChunkLoader.LOGGER.error("Error overworld does not exists");
